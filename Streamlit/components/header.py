@@ -1,5 +1,5 @@
 """
-Header component for Support Resolution Chatbot
+Header component for Banking Support AI Agent Chatbot
 Renders the application header with title and status indicators.
 """
 
@@ -18,7 +18,7 @@ def render_header() -> None:
         st.markdown(
             f"""
             <h1 style='color: {THEME_COLORS["primary"]}; margin-bottom: 0;'>
-                🤖 Support Resolution Chatbot
+                🤖 Banking Support AI Agent Chatbot
             </h1>
             """,
             unsafe_allow_html=True,

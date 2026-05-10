@@ -1,5 +1,5 @@
 """
-Sidebar component for Support Resolution Chatbot
+Sidebar component for Banking Support AI Agent Chatbot
 Renders the sidebar with navigation, settings, and conversation controls.
 """
 
@@ -135,7 +135,7 @@ def render_about_section() -> None:
     
     st.markdown(
         """
-        **Support Resolution Chatbot v1.0**
+        **Banking Support AI Agent Chatbot v1.0**
         
         An intelligent multi-agent support system powered by advanced language models
         and retrieval-augmented generation (RAG).

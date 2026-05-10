@@ -1,5 +1,5 @@
 """
-Components package for Support Resolution Chatbot
+Components package for Banking Support AI Agent Chatbot
 Contains reusable UI components for the Streamlit application.
 """
 

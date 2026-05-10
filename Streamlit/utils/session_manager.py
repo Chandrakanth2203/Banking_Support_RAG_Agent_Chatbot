@@ -1,5 +1,5 @@
 """
-Session Manager module for Support Resolution Chatbot
+Session Manager module for Banking Support AI Agent Chatbot
 Manages session state and data persistence across Streamlit reruns.
 """
 

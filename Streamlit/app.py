@@ -1,5 +1,5 @@
 """
-Support Resolution Chatbot - Main Streamlit Application
+Banking Support AI Agent Chatbot - Main Streamlit Application
 This module serves as the entry point for the chatbot UI interface.
 """
 
@@ -51,6 +51,6 @@ render_chat_interface()
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray; font-size: 0.8rem;'>"
-    "Support Resolution Chatbot v1.0 | Powered by Streamlit</div>",
+    "Banking Support AI Agent Chatbot v1.0 | Powered by Streamlit</div>",
     unsafe_allow_html=True,
 )

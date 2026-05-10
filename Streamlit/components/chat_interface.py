@@ -1,5 +1,5 @@
 """
-Chat Interface component for Support Resolution Chatbot
+Chat Interface component for Banking Support AI Agent Chatbot
 Renders the main chat interface with message display and input handling.
 """
 
@@ -43,7 +43,7 @@ def render_chat_history() -> None:
         st.markdown(
             f"""
             <div style='text-align: center; padding: 3rem 1rem; color: gray;'>
-                <h3>👋 Welcome to Support Resolution Chatbot</h3>
+                <h3>👋 Welcome to Banking Support AI Agent Chatbot</h3>
                 <p>Start a conversation by typing a message below.</p>
                 <p style='font-size: 0.9rem;'>
                     Ask me anything about our support services, products, or policies.
@@ -263,7 +263,7 @@ def generate_response(user_input: str) -> str:
     # Placeholder responses based on keywords
     if any(word in user_input.lower() for word in ["hello", "hi", "hey"]):
         return (
-            "👋 Hello! I'm your Support Resolution Chatbot. "
+            "👋 Hello! I'm your Banking Support AI Agent Chatbot. "
             "I'm here to help you with any questions or issues you might have. "
             "How can I assist you today?"
         )

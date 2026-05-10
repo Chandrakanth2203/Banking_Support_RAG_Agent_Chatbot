@@ -1,5 +1,5 @@
 """
-Logger configuration module for Support Resolution Chatbot
+Logger configuration module for Banking Support AI Agent Chatbot
 Provides logging setup and configuration for the application.
 """
 

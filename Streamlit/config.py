@@ -1,11 +1,11 @@
 """
-Configuration module for Support Resolution Chatbot
+Configuration module for Banking Support AI Agent Chatbot
 Contains all configuration settings, theme colors, and page configurations.
 """
 
 # Page configuration
 PAGE_CONFIG = {
-    "page_title": "Support Resolution Chatbot",
+    "page_title": "Banking Support AI Agent Chatbot",
     "page_icon": "🤖",
     "layout": "wide",
     "initial_sidebar_state": "expanded",

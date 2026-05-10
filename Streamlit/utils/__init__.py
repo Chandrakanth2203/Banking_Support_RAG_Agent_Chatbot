@@ -1,5 +1,5 @@
 """
-Utils package for Support Resolution Chatbot
+Utils package for Banking Support AI Agent Chatbot
 Contains utility modules for logging, session management, and helper functions.
 """
 

@@ -1,5 +1,5 @@
 """
-Support Resolution Chatbot - Streamlit UI
+Banking Support AI Agent Chatbot - Streamlit UI
 A modern, professional chatbot interface built with Streamlit.
 
 File Structure:
