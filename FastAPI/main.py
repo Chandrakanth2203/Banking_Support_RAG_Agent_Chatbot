@@ -1,15 +1,40 @@
 """
 FastAPI Backend for Banking Support AI Agent Chatbot
-Provides APIs for chat processing, RAG, and multi-agent support resolution.
+
+Provides APIs for:
+- Chat message processing and conversation management
+- RAG (Retrieval-Augmented Generation) knowledge base search
+- Multi-agent routing and response generation
+- User feedback collection and analysis
+- System monitoring and health checks
+
+Modules Used:
+    - models: Request/response Pydantic schemas
+    - services: Business logic services for chat, RAG, feedback, agents
+    - config: Application configuration
+
+API Routes:
+    - /health: Health check
+    - /chat: Send message and get response
+    - /knowledge-base/*: Knowledge base operations
+    - /feedback: Submit and retrieve feedback
+    - /agents: List and manage agents
+    - /system/status: System monitoring
+
+Example:
+    Run with: python main.py
+    API available at: http://localhost:8000
+    API docs: http://localhost:8000/docs
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from datetime import datetime
 
-from models.schemas import (
+# Import models from models package
+from models import (
     ChatRequest,
     ChatResponse,
     KnowledgeBaseSearchRequest,
@@ -18,10 +43,16 @@ from models.schemas import (
     FeedbackResponse,
     ConversationRequest,
 )
-from services.chat_service import ChatService
-from services.rag_service import RAGService
-from services.feedback_service import FeedbackService
-from services.agent_service import AgentService
+
+# Import services from services package
+from services import (
+    ChatService,
+    RAGService,
+    FeedbackService,
+    AgentService,
+)
+
+# Import configuration
 from config import API_CONFIG, LOGGING_CONFIG
 
 # Configure logging
@@ -37,7 +68,13 @@ agent_service = AgentService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup and shutdown events."""
+    """
+    Lifespan context manager for startup and shutdown events.
+    
+    Manages application lifecycle:
+    - Startup: Initialize all services
+    - Shutdown: Cleanup resources
+    """
     logger.info("Banking Support AI Agent Chatbot API Starting...")
     # Startup
     await chat_service.initialize()
