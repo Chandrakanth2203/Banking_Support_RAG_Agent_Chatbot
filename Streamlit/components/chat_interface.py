@@ -10,8 +10,10 @@ from utils.session_manager import (
     add_message,
     get_chat_history,
     get_session_data,
+    get_conversation_id,
 )
 from utils.logger import setup_logger
+from utils.api_client import get_api_client
 from config import THEME_COLORS, CHAT_CONFIG
 
 logger = setup_logger(__name__)
@@ -228,11 +230,24 @@ def handle_user_input(user_input: str) -> None:
     
     # Show typing indicator
     with st.spinner("🤔 Processing your request..."):
-        # TODO: Integrate with RAG and Multi-Agent system
-        # This is where you would call your backend API or RAG system
+        # Call API to get response
+        api_client = get_api_client()
+        response_data = api_client.send_message(
+            conversation_id=get_conversation_id(),
+            message=user_input,
+            temperature=get_session_data("temperature", 0.7),
+            max_tokens=2048,
+            model=get_session_data("model", "GPT-4"),
+        )
         
-        # Placeholder response
-        response = generate_response(user_input)
+        if response_data:
+            response = response_data.get("response", "Error processing request")
+            agent_type = response_data.get("agent_type", "unknown")
+            confidence = response_data.get("confidence", 0)
+        else:
+            response = "I apologize, but I'm unable to process your request at the moment. Please try again later."
+            agent_type = None
+            confidence = None
         
         # Add assistant response to history
         add_message(
@@ -241,40 +256,11 @@ def handle_user_input(user_input: str) -> None:
             metadata={
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "model": get_session_data("model", "GPT-4"),
+                "agent": agent_type,
+                "confidence": confidence,
             },
         )
     
     logger.info("Response generated and added to history")
     st.rerun()
 
-
-def generate_response(user_input: str) -> str:
-    """
-    Generate a response to the user input.
-    
-    Args:
-        user_input (str): The user's input message
-    
-    Returns:
-        str: The generated response
-    
-    TODO: Replace this with actual RAG and multi-agent integration
-    """
-    # Placeholder responses based on keywords
-    if any(word in user_input.lower() for word in ["hello", "hi", "hey"]):
-        return (
-            "👋 Hello! I'm your Banking Support AI Agent Chatbot. "
-            "I'm here to help you with any questions or issues you might have. "
-            "How can I assist you today?"
-        )
-    elif any(word in user_input.lower() for word in ["help", "support", "issue"]):
-        return (
-            "I'm ready to help! Please describe your issue in detail, and I'll do my best "
-            "to provide you with a solution. If needed, I can escalate your case to a human agent."
-        )
-    else:
-        return (
-            "Thank you for your question. I'm analyzing the knowledge base to find the most "
-            "relevant information for you. In a production environment, this would be connected "
-            "to your actual support documentation and AI models."
-        )
