@@ -1,112 +1,253 @@
 """
 RAG (Retrieval-Augmented Generation) Service for Banking Support AI Agent Chatbot.
-Handles knowledge base search and document management.
+Orchestrates the complete RAG pipeline: ingestion, embedding, retrieval, and generation.
+
+Pipeline:
+1. Document Ingestion: Load and chunk documents
+2. Embedding: Generate embeddings for chunks using sentence transformers
+3. Indexing: Store embeddings in FAISS vector database
+4. Retrieval: Find relevant chunks using semantic similarity
+5. Augmentation: Prepare context and prompts for LLM
+6. Generation: Generate responses using LLM with RAG context
 """
 
 import logging
 from typing import Dict, List, Optional, Any
-import json
-import os
 from pathlib import Path
+from datetime import datetime
+
+from .document_ingestion import DocumentIngestion
+from .embedding import EmbeddingGenerator
+from .vector_store import VectorStore
+from .retrieval import Retriever
+from .augmentation import ContextAugmentation
+from .generation import ResponseGenerator
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    """Service for RAG-based knowledge base search."""
+    """
+    Complete RAG Service orchestrating all components.
+    """
     
-    def __init__(self):
-        """Initialize the RAG service."""
-        self.documents: Dict[str, Dict[str, Any]] = {}
-        self.document_counter = 0
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize RAG service.
+        
+        Args:
+            config (Dict): Configuration dictionary with settings
+        """
+        self.config = config or self._get_default_config()
         self.logger = logger
+        
+        # Components
+        self.ingestion = DocumentIngestion(
+            chunk_size=self.config.get("chunk_size", 512),
+            overlap=self.config.get("overlap", 50),
+        )
+        
+        self.embeddings = None
+        self.vector_store = None
+        self.retriever = None
+        self.augmentation = ContextAugmentation(
+            max_context_tokens=self.config.get("max_context_tokens", 2000)
+        )
+        self.generator = ResponseGenerator(
+            model_name=self.config.get("model_name", "gpt-4")
+        )
+        
+        # State
+        self.documents = []
+        self.initialized = False
     
-    async def initialize(self):
-        """Initialize the service."""
-        self.logger.info("RAGService initialized")
-        # In production, load knowledge base from database/vector store
-        await self._load_sample_knowledge_base()
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Get default configuration."""
+        return {
+            "chunk_size": 512,
+            "overlap": 50,
+            "embedding_model": "all-MiniLM-L6-v2",
+            "max_context_tokens": 2000,
+            "model_name": "gpt-4",
+            "top_k": 5,
+        }
     
-    async def _load_sample_knowledge_base(self):
-        """Load knowledge base from Documents folder."""
+    async def initialize(self) -> None:
+        """Initialize the RAG service with all components."""
         try:
-            # Get the Documents folder path
-            # Navigate from RAG folder up to Support_Resolution... folder
-            base_path = Path(__file__).parent.parent
-            docs_folder = base_path / "Documents"
+            self.logger.info("Initializing RAG Service...")
             
-            if not docs_folder.exists():
-                self.logger.warning(f"Documents folder not found at {docs_folder}")
+            # Initialize embedding generator
+            self.logger.info(f"Loading embedding model: {self.config['embedding_model']}")
+            self.embeddings = EmbeddingGenerator(
+                model_name=self.config["embedding_model"]
+            )
+            
+            # Initialize vector store
+            embedding_dim = self.embeddings.get_embedding_dimension()
+            self.vector_store = VectorStore(embedding_dim=embedding_dim)
+            
+            # Initialize retriever
+            self.retriever = Retriever(self.embeddings, self.vector_store)
+            
+            # Load documents
+            await self._load_knowledge_base()
+            
+            self.initialized = True
+            self.logger.info("RAG Service initialized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error initializing RAG Service: {str(e)}")
+            raise
+    
+    async def _load_knowledge_base(self) -> None:
+        """Load and process documents from Documents folder."""
+        try:
+            documents_folder = Path(__file__).parent.parent / "Documents"
+            
+            if not documents_folder.exists():
+                self.logger.warning(f"Documents folder not found: {documents_folder}")
                 return
             
-            # Load all documents from the Documents folder
-            for file_path in docs_folder.glob("*"):
-                if file_path.is_file():
-                    try:
-                        # Extract title from filename (without extension)
-                        title = file_path.stem
-                        
-                        # Read file content
-                        if file_path.suffix.lower() == '.docx':
-                            # For .docx files, try to extract text
-                            content = self._extract_docx_content(str(file_path))
-                        elif file_path.suffix.lower() in ['.txt', '.md']:
-                            # For text files
-                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                content = f.read()
-                        else:
-                            # Try to read as text for other formats
-                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                content = f.read()
-                        
-                        # Determine category based on filename
-                        category = self._categorize_document(title)
-                        
-                        # Add document to knowledge base
-                        await self.add_document(
-                            title=title,
-                            content=content,
-                            category=category,
-                        )
-                        
-                    except Exception as e:
-                        self.logger.error(f"Error loading document {file_path}: {str(e)}")
-                        continue
+            self.logger.info(f"Loading documents from: {documents_folder}")
             
-            self.logger.info(f"Loaded {len(self.documents)} documents from {docs_folder}")
+            # Ingest documents
+            documents = self.ingestion.ingest_documents(documents_folder)
+            self.documents = documents
+            
+            if not documents:
+                self.logger.warning("No documents ingested")
+                return
+            
+            # Extract all chunks and generate embeddings
+            all_chunks = []
+            all_metadata = []
+            
+            for doc in documents:
+                for chunk in doc["chunks"]:
+                    all_chunks.append(chunk["content"])
+                    all_metadata.append({
+                        "content": chunk["content"],
+                        "source": doc["source"],
+                        "title": doc["title"],
+                        "category": doc["category"],
+                        "chunk_id": chunk["chunk_id"],
+                        "document_path": doc["source_path"],
+                    })
+            
+            self.logger.info(f"Processing {len(all_chunks)} chunks for embedding...")
+            
+            # Generate embeddings
+            embeddings = self.embeddings.generate_embeddings(all_chunks)
+            
+            # Add to vector store
+            self.vector_store.add_embeddings(embeddings, all_metadata)
+            
+            self.logger.info(f"Knowledge base loaded: {len(documents)} documents, "
+                           f"{len(all_chunks)} chunks, "
+                           f"{self.vector_store.get_size()} embeddings in index")
             
         except Exception as e:
-            self.logger.error(f"Error loading knowledge base from Documents folder: {str(e)}")
+            self.logger.error(f"Error loading knowledge base: {str(e)}")
+            raise
     
-    def _extract_docx_content(self, file_path: str) -> str:
-        """Extract text content from a .docx file."""
-        try:
-            from docx import Document
-            doc = Document(file_path)
-            content = "\n".join([para.text for para in doc.paragraphs])
-            return content if content.strip() else "Document content could not be extracted."
-        except ImportError:
-            # If python-docx is not installed, return a placeholder
-            self.logger.warning("python-docx not installed. Cannot extract .docx content.")
-            return "Document requires python-docx library for content extraction."
-        except Exception as e:
-            self.logger.error(f"Error extracting .docx content: {str(e)}")
-            return "Error extracting document content."
-    
-    def _categorize_document(self, title: str) -> str:
-        """Categorize document based on its title."""
-        title_lower = title.lower()
+    async def search_knowledge_base(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        category_filter: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search knowledge base for relevant documents using semantic similarity.
         
-        if 'faq' in title_lower or 'question' in title_lower:
-            return "FAQs"
-        elif 'policy' in title_lower or 'manual' in title_lower:
-            return "Policies"
-        elif 'product' in title_lower or 'brochure' in title_lower:
-            return "Products"
-        elif 'regulatory' in title_lower or 'rbi' in title_lower or 'guidelines' in title_lower:
-            return "Regulatory"
-        else:
-            return "General"
+        Args:
+            query (str): User query
+            top_k (int): Number of results to return
+            category_filter (str): Filter by category
+            
+        Returns:
+            List[Dict]: Relevant document chunks with scores
+        """
+        if not self.initialized:
+            self.logger.warning("RAG Service not initialized")
+            return []
+        
+        try:
+            top_k = top_k or self.config["top_k"]
+            
+            results = self.retriever.retrieve(
+                query=query,
+                top_k=top_k,
+                category_filter=category_filter,
+            )
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error searching: {str(e)}")
+            return []
+    
+    async def generate_response(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        temperature: float = 0.7,
+    ) -> Dict[str, Any]:
+        """
+        Generate a response using the complete RAG pipeline.
+        
+        Args:
+            query (str): User query
+            top_k (int): Number of context chunks
+            temperature (float): LLM temperature
+            
+        Returns:
+            Dict: Response with sources and metadata
+        """
+        try:
+            # 1. Retrieve
+            retrieved_chunks = await self.search_knowledge_base(query, top_k)
+            
+            # 2. Augment
+            context = self.augmentation.assemble_context(retrieved_chunks)
+            prompt = self.augmentation.create_prompt(query, context)
+            
+            # 3. Generate
+            response = self.generator.generate(
+                prompt=prompt,
+                temperature=temperature,
+                max_tokens=512,
+            )
+            
+            # 4. Format
+            formatted_response = {
+                "response": response.get("content", ""),
+                "query": query,
+                "sources": [
+                    {
+                        "title": chunk["title"],
+                        "source": chunk["source"],
+                        "relevance": chunk["relevance_score"],
+                    }
+                    for chunk in retrieved_chunks
+                ],
+                "model": response.get("model"),
+                "tokens_used": response.get("tokens_used"),
+                "timestamp": datetime.now().isoformat(),
+                "success": response.get("success", False),
+            }
+            
+            return formatted_response
+            
+        except Exception as e:
+            self.logger.error(f"Error generating response: {str(e)}")
+            return {
+                "response": f"Error: {str(e)}",
+                "query": query,
+                "sources": [],
+                "success": False,
+                "error": str(e),
+            }
     
     async def add_document(
         self,
@@ -114,73 +255,73 @@ class RAGService:
         content: str,
         category: Optional[str] = None,
     ) -> str:
-        """Add a document to the knowledge base."""
-        self.document_counter += 1
-        doc_id = f"doc_{self.document_counter}"
+        """
+        Add a new document to the knowledge base.
         
-        self.documents[doc_id] = {
-            "document_id": doc_id,
-            "title": title,
-            "content": content,
-            "category": category,
-        }
-        
-        self.logger.info(f"Added document to knowledge base: {title}")
-        return doc_id
-    
-    async def search_knowledge_base(
-        self,
-        query: str,
-        top_k: int = 5,
-    ) -> List[Dict[str, Any]]:
-        """Search knowledge base for relevant documents."""
-        # Simple keyword matching (in production, use vector similarity with embeddings)
-        results = []
-        query_lower = query.lower()
-        
-        for doc_id, doc in self.documents.items():
-            # Simple keyword matching score
-            score = 0.0
+        Args:
+            title (str): Document title
+            content (str): Document content
+            category (str): Document category
             
-            # Check title
-            if query_lower in doc["title"].lower():
-                score += 0.5
+        Returns:
+            str: Document ID
+        """
+        try:
+            if not self.initialized:
+                raise ValueError("RAG Service not initialized")
             
-            # Check content
-            content_lower = doc["content"].lower()
-            words = query_lower.split()
-            for word in words:
-                if word in content_lower:
-                    score += 0.1
+            # Create document entry
+            doc_id = f"doc_{len(self.documents) + 1}"
             
-            if score > 0:
-                results.append({
-                    "document_id": doc_id,
-                    "title": doc["title"],
-                    "content": doc["content"],
-                    "category": doc.get("category"),
-                    "relevance_score": min(score, 1.0),
+            # Clean and chunk content
+            cleaned = self.ingestion._clean_text(content)
+            chunks = self.ingestion._chunk_text(cleaned)
+            
+            # Generate embeddings
+            chunk_contents = [c["content"] for c in chunks]
+            embeddings = self.embeddings.generate_embeddings(chunk_contents)
+            
+            # Create metadata
+            metadata = []
+            for chunk in chunks:
+                metadata.append({
+                    "content": chunk["content"],
+                    "source": title,
+                    "title": title,
+                    "category": category or "General",
+                    "chunk_id": chunk["chunk_id"],
+                    "document_path": "",
                 })
-        
-        # Sort by relevance and return top_k
-        results.sort(key=lambda x: x["relevance_score"], reverse=True)
-        self.logger.info(f"Knowledge base search for '{query}' returned {len(results)} results")
-        
-        return results[:top_k]
+            
+            # Add to vector store
+            self.vector_store.add_embeddings(embeddings, metadata)
+            
+            self.logger.info(f"Added document: {title} with {len(chunks)} chunks")
+            return doc_id
+            
+        except Exception as e:
+            self.logger.error(f"Error adding document: {str(e)}")
+            raise
     
     async def get_document_count(self) -> int:
-        """Get total number of documents in knowledge base."""
+        """Get total number of documents."""
         return len(self.documents)
     
     async def get_knowledge_base_stats(self) -> Dict[str, Any]:
         """Get knowledge base statistics."""
         categories = {}
-        for doc in self.documents.values():
+        total_chunks = 0
+        
+        for doc in self.documents:
             category = doc.get("category", "Uncategorized")
-            categories[category] = categories.get(category, 0) + 1
+            categories[category] = categories.get(category, 0) + len(doc["chunks"])
+            total_chunks += len(doc["chunks"])
         
         return {
             "total_documents": len(self.documents),
+            "total_chunks": total_chunks,
+            "embeddings_in_index": self.vector_store.get_size() if self.vector_store else 0,
             "categories": categories,
-            "last_updated": "2024-05-10",  # In production, track actual updates
+            "embedding_model": self.config["embedding_model"],
+            "initialized": self.initialized,
         }
