@@ -28,7 +28,7 @@ class DocumentIngestion:
     
     def ingest_documents(self, documents_folder: Path) -> List[Dict[str, Any]]:
         """
-        Ingest all documents from a folder.
+        Ingest all documents from a folder recursively.
         
         Args:
             documents_folder (Path): Path to documents folder
@@ -42,7 +42,11 @@ class DocumentIngestion:
             self.logger.warning(f"Documents folder not found: {documents_folder}")
             return []
         
-        for file_path in documents_folder.glob("*"):
+        # Recursively fetch all files from the documents folder and subdirectories
+        all_files = list(documents_folder.glob("**/*"))
+        self.logger.info(f"Found {len(all_files)} total items in {documents_folder}")
+        
+        for file_path in all_files:
             if not file_path.is_file():
                 continue
             
