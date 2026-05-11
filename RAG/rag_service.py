@@ -18,7 +18,7 @@ from datetime import datetime
 
 from .document_ingestion import DocumentIngestion
 from .embedding import EmbeddingGenerator
-from .vector_store import VectorStore
+from .vector_store import WeaviateVectorStore
 from .retrieval import Retriever
 from .augmentation import ContextAugmentation
 from .generation import ResponseGenerator
@@ -70,6 +70,8 @@ class RAGService:
             "max_context_tokens": 2000,
             "model_name": "gpt-4",
             "top_k": 5,
+            "weaviate_url": "http://localhost:8080",
+            "weaviate_api_key": None,
         }
     
     async def initialize(self) -> None:
@@ -83,12 +85,22 @@ class RAGService:
                 model_name=self.config["embedding_model"]
             )
             
-            # Initialize vector store
+            # Initialize Weaviate vector store
             embedding_dim = self.embeddings.get_embedding_dimension()
-            self.vector_store = VectorStore(embedding_dim=embedding_dim)
+            self.logger.info(f"Initializing Weaviate vector store at {self.config['weaviate_url']}")
+            self.vector_store = WeaviateVectorStore(
+                url=self.config.get("weaviate_url", "http://localhost:8080"),
+                api_key=self.config.get("weaviate_api_key"),
+                embedding_dim=embedding_dim,
+                class_name="DocumentChunk"
+            )
             
-            # Initialize retriever
-            self.retriever = Retriever(self.embeddings, self.vector_store)
+            # Initialize retriever with re-ranking enabled
+            self.retriever = Retriever(
+                self.embeddings,
+                self.vector_store,
+                use_reranker=self.config.get("use_reranker", True)
+            )
             
             # Load documents
             await self._load_knowledge_base()

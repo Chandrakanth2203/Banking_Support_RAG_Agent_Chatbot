@@ -11,19 +11,44 @@ logger = logging.getLogger(__name__)
 
 
 class Retriever:
-    """Retrieves relevant documents based on query similarity."""
+    """Retrieves relevant documents based on query similarity with re-ranking."""
     
-    def __init__(self, embedding_generator, vector_store):
+    def __init__(self, embedding_generator, vector_store, use_reranker: bool = True):
         """
         Initialize retriever.
         
         Args:
             embedding_generator: EmbeddingGenerator instance
             vector_store: VectorStore instance
+            use_reranker (bool): Whether to use cross-encoder for re-ranking
         """
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
+        self.use_reranker = use_reranker
+        self.reranker = None
         self.logger = logger
+        
+        if use_reranker:
+            self._init_reranker()
+    
+    def _init_reranker(self):
+        """Initialize cross-encoder for result re-ranking."""
+        try:
+            from sentence_transformers import CrossEncoder
+            
+            # Use a lightweight cross-encoder model
+            model_name = "cross-encoder/mmarco-MiniLMv2-L12-H384-v1"
+            self.reranker = CrossEncoder(model_name)
+            self.logger.info(f"Initialized reranker with model: {model_name}")
+            
+        except ImportError:
+            self.logger.warning("sentence-transformers not available for cross-encoder re-ranking")
+            self.reranker = None
+            self.use_reranker = False
+        except Exception as e:
+            self.logger.error(f"Error initializing reranker: {str(e)}")
+            self.reranker = None
+            self.use_reranker = False
     
     def preprocess_query(self, query: str) -> str:
         """
@@ -84,12 +109,68 @@ class Retriever:
                 filters=filters if filters else None
             )
             
+            # Re-rank results if enabled
+            if self.use_reranker and self.reranker and results:
+                results = self._rerank_results(processed_query, results, top_k)
+            
             self.logger.info(f"Retrieved {len(results)} results")
             return results
             
         except Exception as e:
             self.logger.error(f"Error retrieving: {str(e)}")
             return []
+    
+    def _rerank_results(
+        self,
+        query: str,
+        initial_results: List[Dict[str, Any]],
+        top_k: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Re-rank retrieval results using cross-encoder for better relevance.
+        
+        Args:
+            query (str): Original query
+            initial_results (List[Dict]): Results from vector search
+            top_k (int): Number of results to return after re-ranking
+            
+        Returns:
+            List[Dict]: Re-ranked results
+        """
+        try:
+            if not initial_results:
+                return initial_results
+            
+            # Prepare pairs for cross-encoder
+            pairs = [
+                [query, result.get("content", "")]
+                for result in initial_results
+            ]
+            
+            # Score with cross-encoder
+            scores = self.reranker.predict(pairs)
+            
+            # Add reranker scores to results
+            for result, score in zip(initial_results, scores):
+                # Store both original vector similarity and reranker score
+                result["reranker_score"] = float(score)
+                # Combine scores (weighted average)
+                original_score = result.get("relevance_score", 0)
+                result["combined_score"] = 0.4 * original_score + 0.6 * (score / 10.0)  # Normalize reranker score
+            
+            # Sort by combined score
+            reranked = sorted(initial_results, key=lambda x: x.get("combined_score", 0), reverse=True)
+            
+            # Return top-k
+            final_results = reranked[:top_k]
+            
+            self.logger.info(f"Re-ranked {len(initial_results)} results, returning top {len(final_results)}")
+            return final_results
+            
+        except Exception as e:
+            self.logger.error(f"Error re-ranking results: {str(e)}")
+            # Return original results if re-ranking fails
+            return initial_results[:top_k]
     
     def retrieve_by_source(
         self,
