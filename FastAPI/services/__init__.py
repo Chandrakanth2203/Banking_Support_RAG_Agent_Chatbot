@@ -32,10 +32,25 @@ from .agent_service import AgentService
 
 # RAG Service is imported from FastAPI folder (not RAG folder)
 # This keeps the service orchestration layer in FastAPI
+import sys
+from pathlib import Path
+
+# Add paths for imports
+_fastapi_path = Path(__file__).parent.parent
+_root_path = _fastapi_path.parent
+
+if str(_root_path) not in sys.path:
+    sys.path.insert(0, str(_root_path))
+
 try:
-    from ..rag_service import RAGService
+    from FastAPI.rag_service import RAGService
 except ImportError as e:
-    raise ImportError(f"RAGService not found in FastAPI folder. Error: {str(e)}")
+    # Alternative import attempt
+    try:
+        sys.path.insert(0, str(_fastapi_path))
+        from rag_service import RAGService
+    except ImportError:
+        raise ImportError(f"RAGService not found. Error: {str(e)}")
 
 __all__ = [
     "ChatService",

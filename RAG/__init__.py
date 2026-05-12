@@ -46,6 +46,7 @@ from .vector_store import WeaviateVectorStore, VectorStore
 from .retrieval import Retriever
 from .augmentation import ContextAugmentation
 from .generation import ResponseGenerator
+from .llm_agent import LLMAgent, ShortTermMemory, CalculatorTools
 
 __all__ = [
     "RAGService",
@@ -56,6 +57,9 @@ __all__ = [
     "Retriever",
     "ContextAugmentation",
     "ResponseGenerator",
+    "LLMAgent",
+    "ShortTermMemory",
+    "CalculatorTools",
 ]
 
 __version__ = "2.0.0"

@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # Weaviate Vector Database (for RAG)
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    container_name: weaviate_db
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 20
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-transformers'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatbot_network
+
+  # FastAPI Backend Service
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: banking_fastapi
+    command: fastapi
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+      FASTAPI_HOST: 0.0.0.0
+      FASTAPI_PORT: 8000
+      WEAVIATE_URL: http://weaviate:8080
+      LOG_LEVEL: info
+    volumes:
+      - ./FastAPI:/app/FastAPI
+      - ./RAG:/app/RAG
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      weaviate:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+
+  # Streamlit Frontend Service
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: banking_streamlit
+    command: streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+      STREAMLIT_HOST: 0.0.0.0
+      STREAMLIT_PORT: 8501
+      FASTAPI_URL: http://fastapi:8000
+      LOG_LEVEL: info
+    volumes:
+      - ./Streamlit:/app/Streamlit
+      - ./FastAPI:/app/FastAPI
+      - ./RAG:/app/RAG
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+
+  # Optional: Nginx Reverse Proxy (for production)
+  nginx:
+    image: nginx:alpine
+    container_name: banking_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - fastapi
+      - streamlit
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+    profiles:
+      - prod
+
+volumes:
+  weaviate_data:
+    driver: local
+
+networks:
+  chatbot_network:
+    driver: bridge
+
+# Usage:
+# Development mode (without Nginx):
+#   docker-compose up
+#
+# Production mode (with Nginx):
+#   docker-compose --profile prod up
+#
+# To rebuild images:
+#   docker-compose up --build
+#
+# To view logs:
+#   docker-compose logs -f [service_name]
+#
+# To stop services:
+#   docker-compose down
+#
+# To remove volumes:
+#   docker-compose down -v

@@ -1,13 +1,28 @@
 """
 Agent Service for Banking Support AI Agent Chatbot API.
-Handles multi-agent routing and response generation.
+Handles multi-agent routing and response generation with LLM capabilities.
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Add root path to sys.path for RAG imports
+root_path = Path(__file__).parent.parent.parent
+if str(root_path) not in sys.path:
+    sys.path.insert(0, str(root_path))
+
+# Import LLMAgent for financial calculations
+try:
+    from RAG import LLMAgent
+    LLMAGENT_AVAILABLE = True
+except ImportError:
+    LLMAGENT_AVAILABLE = False
+    logger.warning("LLMAgent not available - financial calculations will be disabled")
 
 
 class AgentService:
@@ -16,6 +31,16 @@ class AgentService:
     def __init__(self):
         """Initialize the agent service."""
         self.logger = logger
+        
+        # Initialize LLM Agent for financial calculations if available
+        self.llm_agent = None
+        if LLMAGENT_AVAILABLE:
+            try:
+                self.llm_agent = LLMAgent()
+                self.logger.info("LLMAgent initialized successfully")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize LLMAgent: {str(e)}")
+        
         self.agents = {
             "general_support": {
                 "agent_type": "general_support",
@@ -44,6 +69,18 @@ class AgentService:
                 "description": "Handles customer complaints and escalations",
                 "capabilities": ["complaint_filing", "status_tracking", "escalation"],
                 "is_available": True,
+            },
+            "financial_calculator": {
+                "agent_type": "financial_calculator",
+                "name": "Financial Calculator Agent",
+                "description": "Performs financial calculations with memory management",
+                "capabilities": [
+                    "simple_interest",
+                    "compound_interest",
+                    "emi_calculation",
+                    "rate_of_return"
+                ],
+                "is_available": LLMAGENT_AVAILABLE,
             },
         }
     
@@ -79,15 +116,30 @@ class AgentService:
     ) -> str:
         """Determine which agent should handle the request."""
         keywords = {
-            "loan_agent": ["loan", "credit", "borrowing", "interest"],
+            "financial_calculator": [
+                "simple interest",
+                "compound interest",
+                "emi",
+                "equated monthly",
+                "rate of return",
+                "roi",
+                "interest",
+                "loan",
+                "installment",
+            ],
+            "loan_agent": ["loan", "credit", "borrowing", "eligibility"],
             "account_management": ["account", "balance", "transfer", "transaction", "password"],
             "complaint_resolution": ["complaint", "issue", "problem", "escalate"],
         }
         
-        # Check keywords in message
+        # Check keywords in message (prioritize financial calculator)
         for agent, words in keywords.items():
             if any(word in message for word in words):
-                return agent
+                # Financial calculator has priority for financial keywords
+                if agent == "financial_calculator" and LLMAGENT_AVAILABLE:
+                    return agent
+                elif agent != "financial_calculator":
+                    return agent
         
         # Check categories in RAG results
         if rag_results:
@@ -112,7 +164,31 @@ class AgentService:
         max_tokens: int = 2048,
     ) -> Dict[str, Any]:
         """Generate response from specific agent."""
-        # Build response from RAG results if available
+        
+        # Handle financial calculator agent
+        if agent_type == "financial_calculator" and self.llm_agent:
+            try:
+                llm_response = self.llm_agent.process_query(message, use_tools=True)
+                
+                return {
+                    "agent_type": agent_type,
+                    "content": llm_response.get("content", ""),
+                    "tool_used": llm_response.get("tool_used", False),
+                    "confidence": 0.95 if llm_response.get("success") else 0.5,
+                    "timestamp": datetime.now().isoformat(),
+                    "model": llm_response.get("model", "gpt-4"),
+                }
+            except Exception as e:
+                self.logger.error(f"Error in financial calculator agent: {str(e)}")
+                return {
+                    "agent_type": agent_type,
+                    "content": f"Error processing financial calculation: {str(e)}",
+                    "confidence": 0.0,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e),
+                }
+        
+        # Build response from RAG results if available for other agents
         response_text = ""
         
         if rag_results:
@@ -136,6 +212,15 @@ class AgentService:
     def _get_default_response(self, agent_type: str, message: str) -> str:
         """Get default response for agent when no RAG results."""
         responses = {
+            "financial_calculator": (
+                "I'm a financial calculation assistant. I can help you with:\n"
+                "- Simple Interest Calculation: SI = (P × R × T) / 100\n"
+                "- Compound Interest: A = P(1 + r/(n×100))^(n×t)\n"
+                "- EMI Calculation: EMI = P × [r(1+r)^n] / [(1+r)^n - 1]\n"
+                "- Rate of Return: ROR = (Profit / Initial Investment / Time) × 100\n\n"
+                f"Your question: {message}\n\n"
+                "Please provide the necessary parameters for calculation."
+            ),
             "loan_agent": (
                 "Thank you for your inquiry about loans. I can help you with:\n"
                 "- Information about different loan types\n"
