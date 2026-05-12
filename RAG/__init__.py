@@ -16,7 +16,7 @@ Pipeline:
 4. Retriever -> searches with vector similarity and cross-encoder re-ranking
 5. ContextAugmentation -> assembles context and prompts
 6. ResponseGenerator -> generates LLM responses
-7. RAGService -> orchestrates entire pipeline
+7. RAGService -> orchestrates entire pipeline (located in FastAPI folder)
 
 Example:
     >>> from RAG import RAGService
@@ -26,7 +26,20 @@ Example:
     >>> print(response["response"])
 """
 
-from .rag_service import RAGService
+# Import RAGService from FastAPI folder where service orchestration is centralized
+import sys
+from pathlib import Path
+
+root_path = Path(__file__).parent.parent
+if str(root_path) not in sys.path:
+    sys.path.insert(0, str(root_path))
+
+try:
+    from FastAPI.rag_service import RAGService
+except ImportError:
+    raise ImportError("RAGService not found in FastAPI folder")
+
+# Import all RAG components from this folder
 from .document_ingestion import DocumentIngestion
 from .embedding import EmbeddingGenerator
 from .vector_store import WeaviateVectorStore, VectorStore

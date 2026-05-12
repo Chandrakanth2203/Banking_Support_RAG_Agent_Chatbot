@@ -13,7 +13,7 @@ from utils.session_manager import (
     get_conversation_id,
 )
 from utils.logger import setup_logger
-from utils.api_client import get_api_client
+from utils.service_interface import get_service_interface
 from config import THEME_COLORS, CHAT_CONFIG
 
 logger = setup_logger(__name__)
@@ -230,14 +230,13 @@ def handle_user_input(user_input: str) -> None:
     
     # Show typing indicator
     with st.spinner("🤔 Processing your request..."):
-        # Call API to get response
-        api_client = get_api_client()
-        response_data = api_client.send_message(
+        # Call service to get response
+        service = get_service_interface()
+        response_data = service.send_message(
             conversation_id=get_conversation_id(),
             message=user_input,
             temperature=get_session_data("temperature", 0.7),
             max_tokens=2048,
-            model=get_session_data("model", "GPT-4"),
         )
         
         if response_data:

@@ -4,21 +4,20 @@ Utils package for Banking Support AI Agent Chatbot.
 This package contains utility modules for:
 - Logging and debugging
 - Session state management
-- API client and communication
+- Service interface for direct FastAPI service access
 - Helper functions and utilities
 
 Modules:
     logger: Logging configuration and setup
     session_manager: Streamlit session state management
-    api_client: API communication client
-    api_config: API configuration and endpoints
+    service_interface: Direct access to FastAPI services
 
 Example:
-    >>> from utils import setup_logger, initialize_session_state, get_api_client
+    >>> from utils import setup_logger, initialize_session_state, get_service_interface
     >>> logger = setup_logger(__name__)
     >>> initialize_session_state()
-    >>> api = get_api_client()
-    >>> response = api.send_message("conv_123", "Hello")
+    >>> service = get_service_interface()
+    >>> response = service.send_message("conv_123", "Hello")
 
 Utility Functions:
     - setup_logger(name, level): Configure logger instance
@@ -28,7 +27,8 @@ Utility Functions:
     - get_chat_history(): Retrieve chat messages
     - clear_chat_history(): Clear all messages
     - get_conversation_id(): Get current conversation ID
-    - get_api_client(base_url): Get or create API client
+    - get_service_interface(): Get unified service interface
+    - initialize_services(): Initialize all services
 """
 
 from .logger import setup_logger, get_logger
@@ -42,7 +42,7 @@ from .session_manager import (
     get_conversation_id,
     reset_session,
 )
-from .api_client import ChatbotAPIClient, get_api_client
+from .service_interface import get_service_interface, initialize_services
 
 __all__ = [
     # Logger utilities
@@ -57,9 +57,9 @@ __all__ = [
     "set_session_data",
     "get_conversation_id",
     "reset_session",
-    # API client utilities
-    "ChatbotAPIClient",
-    "get_api_client",
+    # Service interface utilities
+    "get_service_interface",
+    "initialize_services",
 ]
 
 __version__ = "1.0.0"

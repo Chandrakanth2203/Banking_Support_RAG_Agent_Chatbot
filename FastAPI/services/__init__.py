@@ -30,16 +30,12 @@ from .chat_service import ChatService
 from .feedback_service import FeedbackService
 from .agent_service import AgentService
 
-# RAG Service is imported from RAG folder for better architecture separation
+# RAG Service is imported from FastAPI folder (not RAG folder)
+# This keeps the service orchestration layer in FastAPI
 try:
-    import sys
-    from pathlib import Path
-    rag_path = Path(__file__).parent.parent.parent / "RAG"
-    if str(rag_path) not in sys.path:
-        sys.path.insert(0, str(rag_path.parent))
-    from RAG import RAGService
-except ImportError:
-    raise ImportError("RAG module not found. Ensure RAG folder exists with proper __init__.py")
+    from ..rag_service import RAGService
+except ImportError as e:
+    raise ImportError(f"RAGService not found in FastAPI folder. Error: {str(e)}")
 
 __all__ = [
     "ChatService",
